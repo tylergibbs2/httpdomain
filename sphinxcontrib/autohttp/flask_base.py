@@ -226,24 +226,40 @@ class AutoflaskBase(Directive):
             if self.undoc_modules and view.__module__ in self.modules:
                 continue
 
+            to_analyze = []
+
             view_class = getattr(view, 'view_class', None)
             if view_class is None:
                 view_func = view
+                to_analyze.append((paths, view_func))
             else:
-                view_func = getattr(view_class, method.lower(), None)
+                if len(paths) > 1:
+                    for i in range(len(paths)):
+                        view_func = getattr(view_class, "_doc_{}_{}".format(method.lower(), i), None)
+                        if view_func:
+                            to_analyze.append(([paths[i]], view_func))
+
+                    if len(to_analyze) == 0:
+                        view_func = getattr(view_class, method.lower(), None)
+                        to_analyze.append((paths, view_func))
+                else:
+                    view_func = getattr(view_class, method.lower(), None)
+                    to_analyze.append((paths, view_func))
 
             view_doc = view.__doc__ or ''
-            if view_func and view_func.__doc__:
-                view_doc = view_func.__doc__
 
-            if not isinstance(view_doc, six.text_type):
-                analyzer = ModuleAnalyzer.for_module(view.__module__)
-                view_doc = force_decode(view_doc, analyzer.encoding)
+            for paths, view_func in to_analyze:
+                if view_func and view_func.__doc__:
+                    view_doc = view_func.__doc__
 
-            if not view_doc and 'include-empty-docstring' not in self.options:
-                continue
+                if not isinstance(view_doc, six.text_type):
+                    analyzer = ModuleAnalyzer.for_module(view.__module__)
+                    view_doc = force_decode(view_doc, analyzer.encoding)
 
-            yield (method, paths, view_func, view_doc)
+                if not view_doc and 'include-empty-docstring' not in self.options:
+                    continue
+
+                yield (method, paths, view_func, view_doc)
 
     def groupby_view(self, routes):
         view_to_paths = collections.OrderedDict()
